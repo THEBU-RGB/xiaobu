@@ -1,296 +1,147 @@
 <!DOCTYPE html>
+<!-- 声明这是一个HTML5文档 -->
+
 <html lang="zh-CN">
+<!-- HTML文档的根元素，lang属性指定语言为中文简体 -->
+
 <head>
-  <meta charset="UTF-8">
-  <title>五子棋 · 双人对战</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700&display=swap" rel="stylesheet">
-  <style>
-    /* ---------- 颜色变量 ---------- */
-    :root {
-      --bg-gradient: linear-gradient(135deg, #f0e9e0, #dbe6f5);
-      --board-bg: #f5e9d5;            /* 木纹近似颜色 */
-      --grid-color: #5a3d2e;          /* 深棕网格线 */
-      --black-piece: radial-gradient(circle at 30% 30%, #555, #111);
-      --white-piece: radial-gradient(circle at 30% 30%, #fefefe, #ccc);
-      --highlight-color: gold;
-      --button-bg: #e0c9a6;
-      --button-shadow: rgba(0,0,0,.2);
-      --cell-size: 38px;               /* 交叉点间距 */
-      --padding: 20px;                 /* 棋盘四周留白 */
-    }
-
-    body {
-      margin: 0;
-      font-family: system-ui, sans-serif;
-      background: var(--bg-gradient);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      color: #333;
-    }
-    h1 {
-      font-family: 'Noto Serif SC', serif;
-      font-size: 2rem;
-      margin: 1rem 0 0.2rem;
-    }
-    #status {
-      font-size: 1.2rem;
-      margin-bottom: 0.8rem;
-    }
-
-    /* ---------- 棋盘容器 ---------- */
-    .board {
-      position: relative;
-      width: calc(var(--cell-size) * 14 + var(--padding) * 2);
-      height: calc(var(--cell-size) * 14 + var(--padding) * 2);
-      background: var(--board-bg);
-      border: 2px solid var(--grid-color);
-      border-radius: 0.6rem;
-      box-shadow: 0 6px 12px rgba(0,0,0,.2);
-      /* 绘制细线网格，保持背景颜色可见 */
-      background-image:
-        linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-        linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-      background-size: var(--cell-size) var(--cell-size);
-      background-position: var(--padding) var(--padding);
-    }
-
-    /* ---------- 星位标记 ---------- */
-    .star {
-      position: absolute;
-      width: 6px;
-      height: 6px;
-      background: var(--grid-color);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-    }
-
-    /* ---------- 棋子 ---------- */
-    .piece {
-      position: absolute;
-      width: calc(var(--cell-size) * 0.9);
-      height: calc(var(--cell-size) * 0.9);
-      border-radius: 50%;
-      left: 0; top: 0;
-      transform: translate(-50%, -50%) scale(0);
-      opacity: 0;
-      transition: transform .18s ease-out, opacity .18s ease-out;
-    }
-    .piece.black { background: var(--black-piece); }
-    .piece.white { background: var(--white-piece); }
-
-    /* ---------- 预览棋子 ---------- */
-    .preview-black { opacity: 0.4; transform: translate(-50%, -50%) scale(0.8); }
-    .preview-white { opacity: 0.4; transform: translate(-50%, -50%) scale(0.8); }
-
-    /* ---------- 最近一步标记 ---------- */
-    .last-move::after {
-      content: "";
-      position: absolute;
-      inset: 20%;
-      border: 2px solid var(--highlight-color);
-      border-radius: 50%;
-      animation: pulse 1.4s infinite;
-    }
-    @keyframes pulse {
-      0%   { box-shadow: 0 0 4px var(--highlight-color); }
-      50%  { box-shadow: 0 0 12px var(--highlight-color); }
-      100% { box-shadow: 0 0 4px var(--highlight-color); }
-    }
-
-    /* ---------- 胜利闪烁 ---------- */
-    @keyframes win-flash {
-      0%   { box-shadow: 0 0 3px var(--highlight-color); }
-      50%  { box-shadow: 0 0 12px var(--highlight-color); }
-      100% { box-shadow: 0 0 3px var(--highlight-color); }
-    }
-    .win-piece { animation: win-flash 1.2s infinite; }
-
-    .controls {
-      margin-top: 1rem;
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-    }
-    button {
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-      background: var(--button-bg);
-      border: none;
-      border-radius: 0.4rem;
-      box-shadow: 2px 2px 5px var(--button-shadow);
-      cursor: pointer;
-      transition: transform .1s, box-shadow .2s;
-    }
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 4px 4px 8px var(--button-shadow);
-    }
-
-    @media (max-width: 400px) {
-      :root { --cell-size: 28px; }
-    }
-  </style>
-</head>
-<body>
-  <h1>五子棋 · 双人对战</h1>
-  <div id="status">⚫ 黑棋回合</div>
-  <div class="board" id="board"></div>
-  <div class="controls">
-    <button id="restart">重新开始</button>
-    <span id="moveCount">步数：0</span>
-  </div>
-
-  <script>
-    const SIZE = 15;                     // 交叉点数目
-    const CELL = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'));
-    const PADDING = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--padding'));
-    const STAR_POS = [                    // 星位（0‑based）
-      [2,2],[2,6],[2,10],
-      [6,2],[6,6],[6,10],
-      [10,2],[10,6],[10,10]
-    ];
-
-    let board = [];
-    let curPlayer = 1; // 1 黑, 2 白
-    let gameOver = false;
-    let moveNum = 0;
-    let winCells = [];
-
-    const boardEl = document.getElementById('board');
-    const statusEl = document.getElementById('status');
-    const moveCountEl = document.getElementById('moveCount');
-    const restartBtn = document.getElementById('restart');
-
-    // -------- 初始化 --------
-    function initBoard() {
-      board = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
-      boardEl.innerHTML = '';
-      // 创建星位标记
-      STAR_POS.forEach(([r,c]) => {
-        const dot = document.createElement('div');
-        dot.className = 'star';
-        dot.style.left = `${PADDING + c * CELL}px`;
-        dot.style.top  = `${PADDING + r * CELL}px`;
-        boardEl.appendChild(dot);
-      });
-      curPlayer = 1; gameOver = false; moveNum = 0; winCells = [];
-      updateStatus();
-      moveCountEl.textContent = `步数：${moveNum}`;
-    }
-
-    function updateStatus(text) {
-      if (text) statusEl.textContent = text;
-      else statusEl.textContent = curPlayer===1 ? '⚫ 黑棋回合' : '⚪ 白棋回合';
-    }
-
-    // --------- 落子 ----------
-    function placePiece(r, c) {
-      if (board[r][c] !== 0 || gameOver) return;
-      board[r][c] = curPlayer;
-      moveNum++;
-      const piece = document.createElement('div');
-      piece.className = `piece ${curPlayer===1?'black':'white'}`;
-      piece.style.left = `${PADDING + c * CELL}px`;
-      piece.style.top  = `${PADDING + r * CELL}px`;
-      boardEl.appendChild(piece);
-      // 动画出现
-      requestAnimationFrame(() => {
-        piece.style.opacity = '1';
-        piece.style.transform = 'translate(-50%, -50%) scale(1)';
-      });
-
-      // 标记最近一步（先清除旧的）
-      boardEl.querySelectorAll('.last-move').forEach(el=>el.classList.remove('last-move'));
-      piece.classList.add('last-move');
-
-      if (checkWin(r,c)) {
-        highlightWin();
-        updateStatus(curPlayer===1?'⚫ 黑棋胜！':'⚪ 白棋胜！');
-        gameOver = true;
-        return;
-      }
-      if (moveNum === SIZE*SIZE) {
-        updateStatus('平局');
-        gameOver = true;
-        return;
-      }
-      curPlayer = curPlayer===1?2:1;
-      updateStatus();
-      moveCountEl.textContent = `步数：${moveNum}`;
-    }
-
-    // --------- 胜负检测 ---------
-    function checkWin(r,c) {
-      const dirs = [
-        [[0,1],[0,-1]],   // 横
-        [[1,0],[-1,0]],   // 竖
-        [[1,1],[-1,-1]], // 主对角
-        [[1,-1],[-1,1]]  // 副对角
-      ];
-      const player = board[r][c];
-      winCells = [];
-      for (const dir of dirs) {
-        let line = [[r,c]];
-        for (const [dr,dc] of dir) {
-          let nr=r+dr, nc=c+dc;
-          while (nr>=0 && nr<SIZE && nc>=0 && nc<SIZE && board[nr][nc]===player) {
-            line.push([nr,nc]);
-            nr+=dr; nc+=dc;
-          }
+    <!-- 头部区域，包含页面的元信息 -->
+    <meta charset="UTF-8">
+    <!-- 设置文档的字符编码为UTF-8，支持中文等多种语言 -->
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 视口设置，使页面在不同设备上都能正常显示 -->
+    
+    <title>我的第一个HTML页面</title>
+    <!-- 页面标题，显示在浏览器标签栏上 -->
+    
+    <!-- 简单的内部CSS样式 -->
+    <style>
+        body {
+            font-family: Arial, "Microsoft YaHei", sans-serif;
+            /* 设置字体，优先使用Arial，其次是微软雅黑 */
+            background-color: #f0f0f0;
+            /* 页面背景颜色 */
+            margin: 20px;
+            /* 页面边距 */
         }
-        if (line.length>=5) { winCells=line; return true; }
-      }
-      return false;
-    }
-    function highlightWin() {
-      winCells.forEach(([r,c])=>{
-        const sel = boardEl.querySelector(`.piece[style*="left: ${PADDING + c * CELL}px"][style*="top: ${PADDING + r * CELL}px"]`);
-        if (sel) sel.classList.add('win-piece');
-      });
-    }
+        
+        h1 {
+            color: #333;
+            /* 标题文字颜色 */
+            text-align: center;
+            /* 标题居中对齐 */
+        }
+        
+        p {
+            line-height: 1.6;
+            /* 设置段落行高 */
+        }
+        
+        .container {
+            max-width: 800px;
+            /* 容器最大宽度 */
+            margin: 0 auto;
+            /* 容器居中 */
+            background-color: white;
+            /* 容器背景颜色 */
+            padding: 20px;
+            /* 容器内边距 */
+            border-radius: 8px;
+            /* 容器圆角 */
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            /* 容器阴影效果 */
+        }
+    </style>
+</head>
 
-    // --------- 预览（悬停） ---------
-    boardEl.addEventListener('pointermove', e => {
-      if (gameOver) return;
-      const rect = boardEl.getBoundingClientRect();
-      const x = e.clientX - rect.left - PADDING;
-      const y = e.clientY - rect.top - PADDING;
-      const col = Math.round(x / CELL);
-      const row = Math.round(y / CELL);
-      // 清除旧预览
-      boardEl.querySelectorAll('.preview-black,.preview-white').forEach(p=>p.classList.remove('preview-black','preview-white'));
-      if (row<0||row>=SIZE||col<0||col>=SIZE) return;
-      if (board[row][col]!==0) return;
-      const preview = document.createElement('div');
-      preview.className = `piece ${curPlayer===1?'preview-black':'preview-white'}`;
-      preview.style.left = `${PADDING + col * CELL}px`;
-      preview.style.top  = `${PADDING + row * CELL}px`;
-      boardEl.appendChild(preview);
-    });
-    boardEl.addEventListener('pointerleave',()=>{
-      boardEl.querySelectorAll('.preview-black,.preview-white').forEach(p=>p.remove());
-    });
-
-    // --------- 点击落子 ---------
-    boardEl.addEventListener('click', e => {
-      const rect = boardEl.getBoundingClientRect();
-      const x = e.clientX - rect.left - PADDING;
-      const y = e.clientY - rect.top - PADDING;
-      const col = Math.round(x / CELL);
-      const row = Math.round(y / CELL);
-      if (row<0||row>=SIZE||col<0||col>=SIZE) return;
-      placePiece(row, col);
-    });
-
-    // --------- 重置 ---------
-    restartBtn.addEventListener('click', initBoard);
-
-    // 初始渲染
-    initBoard();
-  </script>
+<body>
+    <!-- 页面主体内容区域 -->
+    
+    <div class="container">
+        <!-- 容器div，用于组织内容 -->
+        
+        <!-- 一级标题 -->
+        <h1>欢迎来到HTML世界！</h1>
+        
+        <!-- 二级标题 -->
+        <h2>什么是HTML？</h2>
+        
+        <!-- 段落文本 -->
+        <p>HTML（超文本标记语言）是用于创建网页的标准标记语言。它使用标记标签来描述网页内容。</p>
+        
+        <!-- 列表示例 -->
+        <h2>HTML的基本组成部分</h2>
+        <ul>
+            <!-- 无序列表 -->
+            <li>文本内容（文字、标题等）</li>
+            <li>图片</li>
+            <li>链接</li>
+            <li>表格</li>
+            <li>表单</li>
+        </ul>
+        
+        <!-- 图片示例 -->
+        <h2>这是一个图片示例</h2>
+        <p>图片会显示在这里，如果图片无法加载则显示alt属性中的文本：</p>
+        <img src="https://via.placeholder.com/400x200" alt="示例图片" style="max-width: 100%;">
+        <!-- img标签用于显示图片，src属性指定图片路径，alt属性提供替代文本 -->
+        
+        <!-- 链接示例 -->
+        <h2>这是一个链接示例</h2>
+        <p>点击下方链接可以跳转到百度首页：</p>
+        <a href="https://www.baidu.com" target="_blank">访问百度</a>
+        <!-- a标签用于创建链接，href属性指定目标URL，target="_blank"表示在新标签页中打开 -->
+        
+        <!-- 简单表格示例 -->
+        <h2>这是一个简单的表格</h2>
+        <table border="1" cellspacing="0" cellpadding="5" style="width: 100%; border-collapse: collapse;">
+            <!-- table标签用于创建表格 -->
+            <tr>
+                <!-- tr标签表示表格的一行 -->
+                <th>姓名</th>
+                <!-- th标签表示表头单元格 -->
+                <th>年龄</th>
+                <th>城市</th>
+            </tr>
+            <tr>
+                <td>张三</td>
+                <!-- td标签表示普通单元格 -->
+                <td>25</td>
+                <td>北京</td>
+            </tr>
+            <tr>
+                <td>李四</td>
+                <td>30</td>
+                <td>上海</td>
+            </tr>
+        </table>
+        
+        <!-- 简单表单示例 -->
+        <h2>这是一个简单的表单</h2>
+        <form action="#" method="get">
+            <!-- form标签用于创建表单，action指定提交地址，method指定提交方式 -->
+            <p>
+                <label for="name">姓名：</label>
+                <!-- label标签用于为表单元素添加标签，for属性与input的id对应 -->
+                <input type="text" id="name" name="name" placeholder="请输入姓名">
+                <!-- input标签创建输入框，type指定类型，id唯一标识，name用于表单提交 -->
+            </p>
+            <p>
+                <label for="email">邮箱：</label>
+                <input type="email" id="email" name="email" placeholder="请输入邮箱">
+            </p>
+            <p>
+                <input type="submit" value="提交">
+                <!-- 提交按钮 -->
+            </p>
+        </form>
+    </div>
+    
+    <!-- 页面底部 -->
+    <footer style="text-align: center; margin-top: 20px; color: #666;">
+        <p>&copy; 2023 我的HTML学习之旅</p>
+    </footer>
 </body>
+
 </html>
